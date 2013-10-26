@@ -1,0 +1,42 @@
+FRP-alike module for Guile
+
+- DAG from values to dependents, with back-links to dependencies, and
+  expression; the expression referencing the dependencies.  Cache
+  field holds calculated value, "tainted" flag indicates whether cache
+  is up-to-date.
+
+- Small example:
+
+  <time>
+  name: time
+  expression: <primitive>
+  back-links: ()
+  dependents: (<yesterday>)
+  cache: <some date>
+  tainted: no
+
+  <yesterday>
+  name: yesterday
+  expression: time - <one-day>
+  back-links: ((time . <time>))
+  dependents: ()
+  cache: <some date>
+  tainted: no
+
+  ...
+
+- Just use Scheme variables and you have your names and back-links in
+  expressions for free.
+
+- Tainting a value: sets the tainted flag, recursively taints
+  dependents.
+
+- Setting a value: changes the expression of and taints the value.
+  (Not allowed in true FRP?  Any advantage in prohibiting this?)
+
+- Requesting a value: yields cached value if not tainted, otherwise
+  recursively requests all dependencies, then calculates, caches, and
+  de-taints the value.
+
+- Triggering a value: requests the value, then recurses down the tree
+  of dependents, calculating, caching, and de-tainting them.
