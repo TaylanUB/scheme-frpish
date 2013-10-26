@@ -31,12 +31,9 @@ FRP-alike module for Guile
 - Tainting a value: sets the tainted flag, recursively taints
   dependents.
 
-- Setting a value: changes the expression of and taints the value.
-  (Not allowed in true FRP?  Any advantage in prohibiting this?)
-
 - Requesting a value: yields cached value if not tainted, otherwise
-  recursively requests all dependencies, then calculates, caches, and
-  de-taints the value.
+  recursively requests dependencies, then calculates, caches,
+  de-taints, and returns the value.
 
-- Triggering a value: requests the value, then recurses down the tree
-  of dependents, calculating, caching, and de-tainting them.
+- Triggering a value: calculates, caches, and de-taints value,
+  triggers dependents.

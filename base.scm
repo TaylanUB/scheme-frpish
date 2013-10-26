@@ -22,8 +22,69 @@
 
 ;; 
 
+
 ;;; Code:
 
+(define-module (frpish base)
+  #:export
+  (
+   make-value
+   taint!
+   get
+   trigger!
+   ))
 
+(use-modules (srfi srfi-9))
+
+(define-record-type <value>
+  (%make-value expression dependencies dependents cache tainted?)
+  value?
+  (expression   expression)
+  (dependencies dependencies)
+  (dependents   dependents)
+  (cache        get-cache set-cache!)
+  (tainted?     tainted?  set-tainted!))
+
+(define-syntax make-value
+  (syntax-rules ()
+    ((_ (value ...) expression)
+     (let ((expression* (lambda ()
+                          (let ((value (get-cache value)) ...)
+                            expression)))
+           (dependencies (list value ...)))
+       (let ((value* (%make-value
+                      expression* dependencies (make-weak-key-hash-table)
+                      (expression*) #f)))
+         (for-each (lambda (dependency)
+                     (hashq-set! (dependents dependency) value* #f))
+                   dependencies)
+         value*)))))
+
+(define (taint! value)
+  (unless (tainted? value)
+    (set-tainted! value #t)
+    (hash-for-each (lambda (value _)
+                     (taint! value))
+                   (dependents value))))
+
+(define (primitive-refresh! value)
+  (let ((result ((expression value))))
+    (set-cache! value result)
+    (set-tainted! value #f)))
+
+(define (refresh-if-needed! value)
+  (when (tainted? value)
+    (for-each refresh-if-needed! (dependencies value))
+    (primitive-refresh! value)))
+
+(define (get value)
+  (refresh-if-needed! value)
+  (get-cache value))
+
+(define (trigger! value)
+  (primitive-refresh! value)
+  (hash-for-each (lambda (value _)
+                   (trigger! value))
+                 (dependents value)))
 
 ;;; base.scm ends here
