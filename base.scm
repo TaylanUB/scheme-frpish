@@ -34,43 +34,71 @@
    trigger!
    ))
 
-(use-modules (srfi srfi-9))
+(use-modules (srfi srfi-1)
+             (srfi srfi-9)
+             (ice-9 control))
 
 (define-record-type <value>
-  (%make-value expression dependencies dependents cache tainted?)
+  (%make-value expression dependencies dependents cache version)
   value?
   (expression   expression)
   (dependencies dependencies)
   (dependents   dependents)
   (cache        get-cache set-cache!)
-  (tainted?     tainted?  set-tainted!))
+  (version      version   set-version!))
 
 (define-syntax make-value
   (syntax-rules ()
-    ((_ (value ...) expression)
+    ((_ (dependency ...) expression)
      (let ((expression* (lambda ()
-                          (let ((value (get-cache value)) ...)
+                          (let ((dependency (get-cache dependency)) ...)
                             expression)))
-           (dependencies (list value ...)))
-       (let ((value* (%make-value
-                      expression* dependencies (make-weak-key-hash-table)
-                      #f #t)))
-         (for-each (lambda (dependency)
-                     (hashq-set! (dependents dependency) value* #f))
-                   dependencies)
-         value*)))))
+           (dependencies (list dependency ...)))
+       (let ((value (%make-value
+                     expression* dependencies (make-weak-key-hash-table)
+                     (if (null? dependencies)
+                         (expression*)
+                         #f)
+                     (if (null? dependencies)
+                         (cons #f #f)
+                         (let ((table (make-hash-table)))
+                           (for-each (lambda (root)
+                                       (hashq-set! table root #f))
+                                     (find-roots dependencies))
+                           table)))))
+         (hashq-set! (dependents dependency) value #f) ...
+         value)))))
+
+(define (find-roots values)
+  (let loop ((roots '())
+             (values values))
+    (if (null? values)
+        roots
+        (loop (lset-union eq? roots (let* ((value (car values))
+                                           (dependencies (dependencies value)))
+                                      (if (null? dependencies)
+                                          (list value)
+                                          (find-roots dependencies))))
+              (cdr values)))))
 
 (define (taint! value)
-  (unless (tainted? value)
-    (set-tainted! value #t)
-    (hash-for-each (lambda (value _)
-                     (taint! value))
-                   (dependents value))))
+  (set-version! value (cons #f #f)))
+
+(define (tainted? value)
+  (and (not (pair? (version value)))
+       (let/ec return
+         (hash-for-each (lambda (root version*)
+                          (if (not (eq? (version root) version))
+                              (return #t)))
+                        (version value))
+         #f)))
 
 (define (primitive-refresh! value)
   (let ((result ((expression value))))
     (set-cache! value result)
-    (set-tainted! value #f)))
+    (hash-for-each-handle (lambda (entry)
+                            (set-cdr! entry (version (car entry))))
+                          (version value))))
 
 (define (refresh-if-needed! value)
   (when (tainted? value)
