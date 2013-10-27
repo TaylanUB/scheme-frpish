@@ -54,7 +54,7 @@
            (dependencies (list value ...)))
        (let ((value* (%make-value
                       expression* dependencies (make-weak-key-hash-table)
-                      (expression*) #f)))
+                      #f #t)))
          (for-each (lambda (dependency)
                      (hashq-set! (dependents dependency) value* #f))
                    dependencies)
